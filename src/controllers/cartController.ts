@@ -263,7 +263,7 @@ const removeCartItem = async (req: Request, res: Response, next: NextFunction) =
     const productId = Number(req.params.productId);
     const { selectedSize } = req.body;
 
-    if (!selectedSize) {
+    if (!productId || !selectedSize) {
       return res.status(400).json({
         success: false,
         message: "ProductId and selectedSize are required",

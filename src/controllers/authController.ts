@@ -83,14 +83,11 @@ const adminLogin = async (req: Request, res: Response, next: NextFunction) => {
   }
 };
 
-const registerUser = async (req: Request, res: Response, next: NextFunction) => {
+const registerUser = async (req: Request,res: Response,next: NextFunction) => {
   try {
     const parsedData = registerSchema.parse(req.body);
-    const { name, email, password, phone } = parsedData;
-
-    const existingUser = await prisma.user.findUnique({
-      where: { email },
-    });
+    const {name, email, password, phone} = parsedData;
+    const existingUser = await prisma.user.findUnique({ where: { email }});
 
     if (existingUser) {
       return res.status(400).json({
@@ -100,9 +97,7 @@ const registerUser = async (req: Request, res: Response, next: NextFunction) => 
     }
 
     const hashedPassword = await bcrypt.hash(password, 10);
-
-    await prisma.user.create({
-      data: {
+    const user = await prisma.user.create({ data: {
         name,
         email,
         password: hashedPassword,
@@ -110,10 +105,27 @@ const registerUser = async (req: Request, res: Response, next: NextFunction) => 
       },
     });
 
+    const otp = Math.floor( 100000 + Math.random() * 900000 ).toString();
+
+    await prisma.otp.deleteMany({ where: { userId: user.id}});
+
+    await prisma.otp.create({
+      data: {
+        userId: user.id,
+        code: otp,
+        type: "REGISTER",
+        isUsed: false,
+        expiresAt: new Date(Date.now() + 3 * 60 * 1000),
+      },
+    });
+
+    // SEND OTP MAIL
+    await sendOTPEmail(email, otp);
     return res.status(201).json({
       success: true,
-      message: "User created successfully",
+      message:"Registration successful. OTP sent to email.",
     });
+
   } catch (error: any) {
     if (error instanceof ZodError) {
       return res.status(422).json({
@@ -125,6 +137,9 @@ const registerUser = async (req: Request, res: Response, next: NextFunction) => 
     next(error);
   }
 };
+
+
+
 
 const loginUser = async (req: Request, res: Response, next: NextFunction) => {
   try {
@@ -172,7 +187,7 @@ const loginUser = async (req: Request, res: Response, next: NextFunction) => {
       code: otp,
       type: "LOGIN",
       isUsed: false,
-      expiresAt: new Date(Date.now() + 5 * 60 * 1000),
+      expiresAt: new Date(Date.now() + 3 * 60 * 1000),
     },
   });
 
@@ -237,7 +252,7 @@ const verifyOTP = async (req: Request, res: Response, next: NextFunction) => {
     const now = new Date();
     const otpAge = (now.getTime() - otpRecord.createdAt.getTime()) / 1000;
 
-    if (otpAge > 300) {
+    if (otpAge > 180) {
       return res.status(400).json({
         success: false,
         message: "OTP expired",
@@ -312,7 +327,7 @@ const forgotPassword = async (req: Request, res: Response, next: NextFunction) =
     }
 
     const otp = Math.floor(100000 + Math.random() * 900000).toString();
-    const expiry = new Date(Date.now() + 5 * 60 * 1000);
+    const expiry = new Date(Date.now() + 3 * 60 * 1000);
 
     await prisma.otp.create({
       data: {
